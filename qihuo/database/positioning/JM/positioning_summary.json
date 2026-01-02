@@ -1,11 +1,11 @@
 {
   "symbol": "JM",
   "symbol_name": "焦煤",
-  "total_records": 180,
+  "total_records": 240,
   "position_types": [
     "成交量",
     "多单持仓",
     "空单持仓"
   ],
-  "update_time": "2025-11-12 20:43:52"
+  "update_time": "2026-01-01 23:21:09"
 }

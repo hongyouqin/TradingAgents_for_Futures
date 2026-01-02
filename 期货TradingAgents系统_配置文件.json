@@ -16,15 +16,15 @@
   
   "api_settings": {
     "deepseek": {
-      "api_key": "sk-293dec7fabb54606b4f8d4f606da3383",
-      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "sk-nxFqeQQ1r4euqs2VtN2EN5xmCuxMnARCfmlI6gQcGWhz83Zo",
+      "base_url": "https://api.qingyuntop.top/v1",
       "model": "deepseek-chat",
       "reasoning_model": "deepseek-reasoner",
       "max_tokens": 4000,
       "temperature": 0.1
     },
     "serper": {
-      "api_key": "04555ec0f2ce150d1cb628c7a80e2e433e193535",
+      "api_key": "8f83617621a0d3775cfe8d74a7323c637d105803",
       "base_url": "https://google.serper.dev/search"
     }
   },

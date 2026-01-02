@@ -984,6 +984,7 @@ akshare数据：来自官方财经接口的权威数据
                 "max_tokens": 6000
             }
             
+            print(f"===========deepseek_url: {deepseek_url}")
             response = self.requests.post(self.deepseek_url, headers=headers, json=data, timeout=120)
             
             if response.status_code == 200:
