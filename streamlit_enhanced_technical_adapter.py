@@ -179,7 +179,7 @@ if __name__ == "__main__":
         print("🧪 测试Streamlit增强版技术分析适配器...")
         
         # 测试基本功能
-        result = await analyze_technical_for_streamlit('RB', include_market_info=True)
+        result = await analyze_technical_for_streamlit('CF', include_market_info=True)
         
         if result.get("success", False):
             print("✅ 适配器测试成功")

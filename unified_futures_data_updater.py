@@ -51,7 +51,7 @@ class UnifiedFuturesDataUpdaterFixed:
         # 初始化数据检查器
         self.data_checker = UnifiedDataChecker()
         
-        # 初始化各个更新器（传入正确的子目录路径）
+        # 初始化各个更新器
         self.updaters = {
             "basis": BasisDataUpdater(str(self.database_path / "basis")),
             "inventory": InventoryDataUpdater(str(self.database_path / "inventory")), 
@@ -60,10 +60,10 @@ class UnifiedFuturesDataUpdaterFixed:
             "technical_analysis": TechnicalDataUpdater(str(self.database_path / "technical_analysis"))
         }
         
-        # 更新顺序（基差 → 库存 → 持仓 → 期限结构 → 技术分析）
+        # 更新顺序
         self.module_order = ["basis", "inventory", "positioning", "term_structure", "technical_analysis"]
         
-        # 初始化统计信息
+        # 初始化统计信息 - 全部使用列表
         self.update_report = {
             "start_time": datetime.now(),
             "target_date": None,
@@ -72,8 +72,8 @@ class UnifiedFuturesDataUpdaterFixed:
                 "total_modules": 0,
                 "successful_modules": 0,
                 "failed_modules": 0,
-                "total_updated_varieties": set(),
-                "total_failed_varieties": set(),
+                "total_updated_varieties": [],  # 改为列表
+                "total_failed_varieties": [],   # 改为列表
                 "total_elapsed_time": 0
             }
         }
@@ -319,7 +319,7 @@ class UnifiedFuturesDataUpdaterFixed:
             }
     
     def run_full_update(self, target_date: datetime, mode: str = "all", 
-                       varieties: Optional[List[str]] = None, modules: Optional[List[str]] = None):
+                    varieties: Optional[List[str]] = None, modules: Optional[List[str]] = None):
         """运行完整更新流程"""
         
         self.update_report["target_date"] = target_date.strftime("%Y-%m-%d")
@@ -353,20 +353,32 @@ class UnifiedFuturesDataUpdaterFixed:
             all_results.append(result)
             self.update_report["modules"][module_name] = result
             
-            # 更新汇总统计
+            # 更新汇总统计 - 修复这里！
             if result["status"] in ["success", "partial"]:
                 self.update_report["summary"]["successful_modules"] += 1
-                self.update_report["summary"]["total_updated_varieties"].update(result["updated_varieties"])
+                # 使用 extend 而不是 update
+                if result["updated_varieties"]:
+                    self.update_report["summary"]["total_updated_varieties"].extend(result["updated_varieties"])
             else:
                 self.update_report["summary"]["failed_modules"] += 1
             
-            self.update_report["summary"]["total_failed_varieties"].update(result["failed_varieties"])
+            # 同样使用 extend
+            if result["failed_varieties"]:
+                self.update_report["summary"]["total_failed_varieties"].extend(result["failed_varieties"])
+            
             self.update_report["summary"]["total_elapsed_time"] += result["elapsed_time"]
             
             # 模块间休息
             if module_name != update_modules[-1]:  # 不是最后一个模块
                 print(f"\n⏳ 等待 2 秒后继续下一个模块...")
                 time.sleep(2)
+        
+        # 去重处理（因为可能同一个品种在不同模块都更新/失败了）
+        if self.update_report["summary"]["total_updated_varieties"]:
+            self.update_report["summary"]["total_updated_varieties"] = list(set(self.update_report["summary"]["total_updated_varieties"]))
+        
+        if self.update_report["summary"]["total_failed_varieties"]:
+            self.update_report["summary"]["total_failed_varieties"] = list(set(self.update_report["summary"]["total_failed_varieties"]))
         
         # 生成总结报告
         self.generate_update_summary(all_results)
@@ -434,14 +446,11 @@ class UnifiedFuturesDataUpdaterFixed:
             return obj.isoformat()
         else:
             return obj
-    
+        
     def save_update_report(self):
         """保存更新报告"""
         try:
             self.update_report["end_time"] = datetime.now()
-            self.update_report["summary"]["total_updated_varieties"] = list(self.update_report["summary"]["total_updated_varieties"])
-            self.update_report["summary"]["total_failed_varieties"] = list(self.update_report["summary"]["total_failed_varieties"])
-            
             # 转换为可序列化格式
             serializable_report = self._convert_to_serializable(self.update_report)
             
@@ -458,7 +467,7 @@ class UnifiedFuturesDataUpdaterFixed:
     
     def retry_failed_varieties(self):
         """重试失败的品种"""
-        failed_list = list(self.update_report["summary"]["total_failed_varieties"])
+        failed_list = self.update_report["summary"]["total_failed_varieties"]
         
         if not failed_list:
             print(f"\n✅ 没有需要重试的失败品种")
@@ -469,8 +478,9 @@ class UnifiedFuturesDataUpdaterFixed:
         
         target_date = datetime.strptime(self.update_report["target_date"], "%Y-%m-%d")
         
-        # 重置失败统计
-        self.update_report["summary"]["total_failed_varieties"] = set()
+        # 重置失败统计 - 改为列表
+        self.update_report["summary"]["total_failed_varieties"] = []
+        self.update_report["summary"]["total_updated_varieties"] = []  # 也重置更新统计
         
         # 重新运行更新，只针对失败品种
         self.run_full_update(target_date, "specific_varieties", failed_list)

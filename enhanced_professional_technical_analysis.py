@@ -34,9 +34,9 @@ OUTPUT_DIR = BASE_DIR / "qihuo" / "output" / "enhanced_technical_analysis"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # API配置
-DEEPSEEK_API_KEY = "sk-293dec7fabb54606b4f8d4f606da3383"
+DEEPSEEK_API_KEY = "sk-7f7d2bc0785c470dbe86de779699c19f"
 DEEPSEEK_API_URL = "https://api.deepseek.com"
-SERPER_API_KEY = "04555ec0f2ce150d1cb628c7a80e2e433e193535"
+SERPER_API_KEY = "8f83617621a0d3775cfe8d74a7323c637d105803"
 SERPER_API_URL = "https://google.serper.dev/search"
 
 # 期货品种配置
@@ -61,51 +61,8 @@ class EnhancedProfessionalTechnicalAnalyzer:
         self.serper_key = serper_key
         self.charts = {}  # 存储生成的图表
         self.external_citations = []  # 存储外部引用
-    
-    def load_technical_data(self, symbol: str) -> Optional[pd.DataFrame]:
-        """加载技术分析数据"""
-        try:
-            symbol_dir = TECHNICAL_ROOT / symbol
-            
-            # 检查数据文件
-            tech_file = symbol_dir / "technical_indicators.csv"
-            ohlc_file = symbol_dir / "ohlc_data.csv"
-            
-            if not tech_file.exists() or not ohlc_file.exists():
-                print(f"❌ {symbol} 技术数据文件不存在")
-                return None
-            
-            # 加载并合并数据
-            df_tech = pd.read_csv(tech_file)
-            df_ohlc = pd.read_csv(ohlc_file)
-            
-            # 处理日期字段
-            if '时间' in df_tech.columns:
-                df_tech['date'] = pd.to_datetime(df_tech['时间'])
-            if '时间' in df_ohlc.columns:
-                df_ohlc['date'] = pd.to_datetime(df_ohlc['时间'])
-            
-            # 标准化OHLC列名
-            ohlc_mapping = {
-                '开盘': 'open', '最高': 'high', '最低': 'low', '收盘': 'close',
-                '成交量': 'volume', '持仓量': 'open_interest'
-            }
-            df_ohlc = df_ohlc.rename(columns=ohlc_mapping)
-            
-            # 合并数据
-            df = pd.merge(df_ohlc, df_tech, on='date', how='inner')
-            df = df.sort_values('date').reset_index(drop=True)
-            
-            # 取最近60个交易日
-            df_recent = df.tail(60).copy()
-            
-            print(f"✅ {symbol} 本地数据加载成功: {len(df_recent)}条记录")
-            return df_recent
-            
-        except Exception as e:
-            print(f"❌ 加载 {symbol} 数据失败: {e}")
-            return None
-    
+        self.html_charts = {}  # 存储HTML格式的图表
+        
     def search_market_info(self, query: str, max_results: int = 5) -> List[Dict]:
         """搜索市场信息并记录引用"""
         try:
@@ -154,6 +111,141 @@ class EnhancedProfessionalTechnicalAnalyzer:
             print(f"❌ 搜索市场信息失败: {e}")
             return []
     
+    def verify_data_sources(self, df_tech: pd.DataFrame, df_ohlc: pd.DataFrame, df_merged: pd.DataFrame):
+        """验证数据来源是否正确"""
+        print(f"\n🔍 数据来源验证:")
+        
+        # 1. 检查技术指标是否来自正确的文件
+        print(f"\n1. 技术指标来源验证:")
+        
+        # 从technical_indicators.csv获取的指标
+        tech_indicators_from_tech = ['MA5', 'MA10', 'MA20', 'MA60', 'EMA20', 'ATR14', 'RSI14', 
+                                    'MACD', 'MACD_SIGNAL', 'MACD_HIST', 'BOLL_UP', 'BOLL_LOW', 
+                                    'BOLL_MID', 'BOLL_WIDTH', 'KDJ_K', 'KDJ_D', 'KDJ_J', 
+                                    'WILLIAMS_R14', 'CCI20', 'STOCH_RSI', 'VOL_MA20', 'OBV', 
+                                    'OI_MA20', 'OI_CHANGE', 'OI_CHANGE_PCT']
+        
+        # 检查这些列是否存在于最终数据中
+        found_in_final = []
+        missing_in_final = []
+        
+        for indicator in tech_indicators_from_tech:
+            if indicator in df_merged.columns:
+                found_in_final.append(indicator)
+            else:
+                missing_in_final.append(indicator)
+        
+        print(f"   ✅ 在最终数据中找到 {len(found_in_final)} 个技术指标")
+        print(f"   ❌ 在最终数据中缺失 {len(missing_in_final)} 个技术指标: {missing_in_final[:5]}...")
+        
+        # 2. 检查价格数据是否来自ohlc_data.csv
+        print(f"\n2. 价格数据来源验证:")
+        
+        price_columns = ['open', 'high', 'low', 'close', 'volume', 'open_interest']
+        price_found = []
+        price_missing = []
+        
+        for col in price_columns:
+            if col in df_merged.columns:
+                price_found.append(col)
+            else:
+                price_missing.append(col)
+        
+        print(f"   ✅ 在最终数据中找到 {len(price_found)} 个价格相关列: {price_found}")
+        if price_missing:
+            print(f"   ❌ 在最终数据中缺失: {price_missing}")
+        
+        # 3. 对比最后一行数据
+        print(f"\n3. 最新数据对比 (2025-12-31):")
+        
+        # 从technical_indicators.csv获取最新数据
+        latest_tech = df_tech.iloc[-1]
+        # 从ohlc_data.csv获取最新数据
+        latest_ohlc = df_ohlc.iloc[-1]
+        # 从合并数据获取最新数据
+        latest_merged = df_merged.iloc[-1]
+        
+        # 检查关键技术指标是否匹配
+        key_indicators = ['MA5', 'MA20', 'MA60', 'RSI14', 'MACD']
+        
+        print(f"   技术指标文件 vs 合并数据:")
+        for indicator in key_indicators:
+            if indicator in latest_tech and indicator in latest_merged:
+                tech_value = latest_tech[indicator]
+                merged_value = latest_merged[indicator]
+                
+                if pd.isna(tech_value) or pd.isna(merged_value):
+                    print(f"     {indicator}: 技术文件={tech_value}, 合并数据={merged_value}")
+                else:
+                    diff = abs(tech_value - merged_value)
+                    if diff < 0.01:  # 允许微小误差
+                        print(f"     ✅ {indicator}: {tech_value:.2f} = {merged_value:.2f}")
+                    else:
+                        print(f"     ❌ {indicator}: 技术文件={tech_value:.2f}, 合并数据={merged_value:.2f}, 差异={diff:.4f}")
+            else:
+                print(f"     ⚠️  {indicator}: 列不存在")
+        
+        # 检查价格数据
+        print(f"\n   OHLC文件 vs 合并数据:")
+        price_fields = ['close', 'open', 'high', 'low', 'volume']
+        for field in price_fields:
+            if field in latest_ohlc and field in latest_merged:
+                ohlc_value = latest_ohlc.get(field, 0)
+                merged_value = latest_merged[field]
+                
+                if isinstance(ohlc_value, (int, float)) and isinstance(merged_value, (int, float)):
+                    diff = abs(ohlc_value - merged_value)
+                    if diff < 0.01:
+                        print(f"     ✅ {field}: {ohlc_value:.2f} = {merged_value:.2f}")
+                    else:
+                        print(f"     ❌ {field}: OHLC文件={ohlc_value:.2f}, 合并数据={merged_value:.2f}, 差异={diff:.4f}")
+            else:
+                print(f"     ⚠️  {field}: 列不存在")
+        
+        # 4. 检查是否有重复列
+        print(f"\n4. 重复列检查:")
+        
+        column_counts = {}
+        for col in df_merged.columns:
+            if col in column_counts:
+                column_counts[col] += 1
+            else:
+                column_counts[col] = 1
+        
+        duplicate_columns = [col for col, count in column_counts.items() if count > 1]
+        if duplicate_columns:
+            print(f"   ❌ 发现重复列: {duplicate_columns}")
+        else:
+            print(f"   ✅ 无重复列")
+        
+        # 5. 显示所有列的分类
+        print(f"\n5. 列分类统计:")
+        
+        # 技术指标列
+        tech_cols = [col for col in df_merged.columns 
+                    if col in tech_indicators_from_tech or 
+                    col in ['MA5', 'MA10', 'MA20', 'MA60', 'RSI14', 'MACD', 'MACD_SIGNAL']]
+        
+        # 价格相关列
+        price_cols = [col for col in df_merged.columns 
+                    if col in price_columns or 
+                    col in ['price_change', 'price_change_pct', 'turnover']]
+        
+        # 其他列
+        other_cols = [col for col in df_merged.columns 
+                    if col not in tech_cols + price_cols + ['date']]
+        
+        print(f"   技术指标列 ({len(tech_cols)}个):")
+        for i, col in enumerate(sorted(tech_cols)[:10], 1):
+            print(f"     {i:2d}. {col}")
+        if len(tech_cols) > 10:
+            print(f"     ... 还有{len(tech_cols)-10}个技术指标列")
+        
+        print(f"\n   价格相关列 ({len(price_cols)}个): {sorted(price_cols)}")
+        
+        if other_cols:
+            print(f"\n   其他列 ({len(other_cols)}个): {sorted(other_cols)}")
+            
     def create_professional_charts(self, df: pd.DataFrame, symbol: str, comprehensive_data: Dict) -> Dict[str, Any]:
         """创建专业技术分析图表"""
         charts = {}
@@ -357,33 +449,144 @@ class EnhancedProfessionalTechnicalAnalyzer:
             print(f"❌ 创建图表失败: {e}")
             return {}
     
-    def call_deepseek_reasoner(self, messages: List[Dict], max_tokens: int = 8000) -> Tuple[str, str]:
-        """调用DeepSeek Reasoner"""
+    def load_technical_data(self, symbol: str) -> Optional[pd.DataFrame]:
+        """加载技术分析数据 - 显示所有列"""
         try:
-            import openai
+            symbol_dir = TECHNICAL_ROOT / symbol
             
-            client = openai.OpenAI(
-                api_key=self.deepseek_key,
-                base_url=DEEPSEEK_API_URL
+            # 检查数据文件
+            tech_file = symbol_dir / "technical_indicators.csv"
+            ohlc_file = symbol_dir / "ohlc_data.csv"
+            
+            if not tech_file.exists() or not ohlc_file.exists():
+                print(f"❌ {symbol} 技术数据文件不存在")
+                return None
+            
+            print(f"✅ 找到数据文件:")
+            print(f"   1. {tech_file.name} (技术指标)")
+            print(f"   2. {ohlc_file.name} (价格数据)")
+            
+            # 加载数据
+            df_tech = pd.read_csv(tech_file)
+            df_ohlc = pd.read_csv(ohlc_file)
+            
+            print(f"\n🔍 原始文件结构:")
+            print(f"   技术指标文件形状: {df_tech.shape}")
+            print(f"   技术指标文件列名 ({len(df_tech.columns)}列):")
+            for i, col in enumerate(df_tech.columns, 1):
+                print(f"     {i:2d}. {col}")
+            
+            print(f"\n   OHLC数据文件形状: {df_ohlc.shape}")
+            print(f"   OHLC数据文件列名 ({len(df_ohlc.columns)}列):")
+            for i, col in enumerate(df_ohlc.columns, 1):
+                print(f"     {i:2d}. {col}")
+            
+            # ========== 处理日期字段 ==========
+            df_tech['date'] = pd.to_datetime(df_tech['时间'])
+            df_ohlc['date'] = pd.to_datetime(df_ohlc['时间'])
+            
+            # ========== 从OHLC文件提取价格数据 ==========
+            print(f"\n💹 从OHLC文件提取价格数据:")
+            
+            # OHLC价格列映射
+            ohlc_price_mapping = {
+                '开盘': 'open',
+                '最高': 'high', 
+                '最低': 'low',
+                '收盘': 'close',
+                '成交量': 'volume',
+                '持仓量': 'open_interest'
+            }
+            
+            # 应用价格列重命名
+            df_ohlc = df_ohlc.rename(columns=ohlc_price_mapping)
+            
+            # OHLC只保留价格列
+            ohlc_price_columns = ['date', 'open', 'high', 'low', 'close', 'volume', 'open_interest']
+            ohlc_cols_to_keep = [col for col in ohlc_price_columns if col in df_ohlc.columns]
+            
+            df_ohlc_price = df_ohlc[ohlc_cols_to_keep].copy()
+            print(f"   OHLC保留列: {ohlc_cols_to_keep}")
+            
+            # ========== 从技术指标文件提取技术指标 ==========
+            print(f"\n📊 从技术指标文件提取技术指标:")
+            
+            # 技术指标文件的列
+            tech_columns = ['date', 'MA5', 'MA10', 'MA20', 'MA60', 'EMA20', 'ATR14', 'RSI14', 
+                        'MACD', 'MACD_SIGNAL', 'MACD_HIST', 'BOLL_UP', 'BOLL_LOW', 'BOLL_MID', 
+                        'BOLL_WIDTH', 'KDJ_K', 'KDJ_D', 'KDJ_J', 'WILLIAMS_R14', 'CCI20', 
+                        'STOCH_RSI', 'VOL_MA20', 'OBV', 'OI_MA20', 'OI_CHANGE', 'OI_CHANGE_PCT']
+            
+            # 检查哪些列存在
+            tech_cols_to_keep = []
+            for col in tech_columns:
+                if col == 'date' or col in df_tech.columns:
+                    tech_cols_to_keep.append(col)
+            
+            df_tech_indicators = df_tech[tech_cols_to_keep].copy()
+            print(f"   技术指标保留 {len(tech_cols_to_keep)-1} 个指标")
+            
+            # ========== 合并数据 ==========
+            print(f"\n🔗 合并数据:")
+            
+            # 检查是否有重复列
+            tech_cols_no_date = [col for col in df_tech_indicators.columns if col != 'date']
+            ohlc_cols_no_date = [col for col in df_ohlc_price.columns if col != 'date']
+            
+            common_cols = set(tech_cols_no_date) & set(ohlc_cols_no_date)
+            if common_cols:
+                print(f"   ⚠️  发现重复列: {list(common_cols)}")
+            
+            df_merged = pd.merge(
+                df_tech_indicators,
+                df_ohlc_price,
+                on='date',
+                how='inner'
             )
             
-            response = client.chat.completions.create(
-                model="deepseek-reasoner",
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=0.1,
-                stream=False
-            )
+            print(f"   合并后形状: {df_merged.shape}")
             
-            message = response.choices[0].message
-            reasoning_content = message.reasoning_content if hasattr(message, 'reasoning_content') else ""
-            final_answer = message.content
+            # ========== 显示合并后的所有列 ==========
+            print(f"\n📋 合并后所有列名 ({len(df_merged.columns)}列):")
+            for i, col in enumerate(df_merged.columns, 1):
+                col_type = "技术指标" if col in tech_cols_no_date else "价格数据" if col in ohlc_cols_no_date else "其他"
+                print(f"     {i:2d}. {col:<20} ({col_type})")
             
-            return reasoning_content, final_answer
+            # ========== 检查关键技术指标 ==========
+            print(f"\n🔍 关键技术指标检查:")
+            key_indicators = ['MA5', 'MA20', 'MA60', 'RSI14', 'MACD', 'MACD_SIGNAL']
+            for indicator in key_indicators:
+                if indicator in df_merged.columns:
+                    value = df_merged[indicator].iloc[-1]
+                    print(f"   ✅ {indicator}: {value}")
+                else:
+                    print(f"   ❌ {indicator}: 列不存在")
+            
+            # ========== 数据清洗和排序 ==========
+            df_merged = df_merged.sort_values('date').reset_index(drop=True)
+            
+            # 取最近60个交易日
+            if len(df_merged) > 60:
+                df_final = df_merged.tail(60).copy()
+                print(f"\n✅ 取最近60个交易日: {len(df_final)}条记录")
+            else:
+                df_final = df_merged.copy()
+                print(f"\n⚠️  数据不足60条，使用全部{len(df_final)}条记录")
+            
+            # 显示最终数据的前几行
+            print(f"\n📊 最终数据前5行:")
+            print(df_final.head())
+            
+            print(f"\n📊 最终数据后5行:")
+            print(df_final.tail())
+            
+            return df_final
             
         except Exception as e:
-            print(f"❌ DeepSeek调用失败: {e}")
-            return "", ""
+            print(f"❌ 加载 {symbol} 数据失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     def generate_enhanced_analysis_prompt(self, comprehensive_data: Dict, market_info: List[Dict]) -> str:
         """生成增强版分析提示词"""
@@ -443,20 +646,30 @@ class EnhancedProfessionalTechnicalAnalyzer:
         return prompt
     
     def extract_comprehensive_data(self, df: pd.DataFrame, symbol: str) -> Dict[str, Any]:
-        """提取综合技术数据"""
+        """提取综合技术数据 - 添加调试信息"""
         if df.empty:
+            print("❌ DataFrame为空")
             return {}
         
         try:
+            print(f"\n🔍 开始提取综合数据:")
+            print(f"   DataFrame形状: {df.shape}")
+            print(f"   最新日期: {df['date'].iloc[-1] if 'date' in df.columns else 'N/A'}")
+            
             latest = df.iloc[-1]
+            print(f"{latest}数据")
             prev_5 = df.iloc[-6] if len(df) >= 6 else df.iloc[0]
             prev_20 = df.iloc[-21] if len(df) >= 21 else df.iloc[0]
             
             def safe_get(series, key, default=0):
                 try:
                     value = series.get(key, default)
-                    return round(float(value), 2) if pd.notna(value) and value != 0 else default
-                except:
+                    if pd.isna(value) or value == 0:
+                        print(f"   ⚠️  {key}: 值为NaN或0")
+                        return default
+                    return round(float(value), 2)
+                except Exception as e:
+                    print(f"   ❌ 获取{key}失败: {e}")
                     return default
             
             # 基础价格数据
@@ -464,17 +677,40 @@ class EnhancedProfessionalTechnicalAnalyzer:
             price_change_5d = ((current_price - prev_5['close']) / prev_5['close'] * 100) if prev_5['close'] > 0 else 0
             price_change_20d = ((current_price - prev_20['close']) / prev_20['close'] * 100) if prev_20['close'] > 0 else 0
             
-            # 趋势分析
+            print(f"   当前价格: {current_price}")
+            print(f"   5日涨跌: {price_change_5d:.2f}%")
+            print(f"   20日涨跌: {price_change_20d:.2f}%")
+            
+            # 检查技术指标数据
+            print(f"\n🔍 技术指标检查:")
+            tech_indicators = ['MA5', 'MA20', 'MA60', 'RSI14', 'MACD', 'MACD_SIGNAL', 'BOLL_UP', 'BOLL_MID', 'BOLL_LOW', 'ATR14']
+            for indicator in tech_indicators:
+                if indicator in latest:
+                    value = latest[indicator]
+                    if pd.isna(value) or value == 0:
+                        print(f"   ⚠️  {indicator}: {value} (无效)")
+                    else:
+                        print(f"   ✅ {indicator}: {value}")
+                else:
+                    print(f"   ❌ {indicator}: 列不存在")
+            
+            # 调用各个分析函数
             trend_analysis = self.analyze_trend_comprehensive(df)
             momentum_analysis = self.analyze_momentum_comprehensive(df)
             support_resistance = self.identify_key_levels(df)
             volume_analysis = self.analyze_volume_comprehensive(df)
             risk_assessment = self.assess_risk_levels(df)
             
+            print(f"\n🔍 分析结果:")
+            print(f"   趋势分析: {trend_analysis.get('ma_alignment', 'N/A')}")
+            print(f"   动量评分: {momentum_analysis.get('momentum_score', 'N/A')}")
+            print(f"   支撑位: {support_resistance.get('support', 'N/A')}")
+            print(f"   阻力位: {support_resistance.get('resistance', 'N/A')}")
+            
             comprehensive_data = {
                 "symbol": symbol,
                 "symbol_name": SYMBOL_NAMES.get(symbol, symbol),
-                "latest_date": latest['date'].strftime('%Y-%m-%d'),
+                "latest_date": latest['date'].strftime('%Y-%m-%d') if hasattr(latest['date'], 'strftime') else str(latest['date']),
                 "current_price": round(current_price, 2),
                 "price_change_5d": round(price_change_5d, 2),
                 "price_change_20d": round(price_change_20d, 2),
@@ -507,10 +743,13 @@ class EnhancedProfessionalTechnicalAnalyzer:
                 "risk_assessment": risk_assessment,
             }
             
+            print(f"✅ 综合数据提取完成，共 {len(comprehensive_data)} 项")
             return comprehensive_data
             
         except Exception as e:
             print(f"❌ 提取综合数据失败: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
     
     def analyze_trend_comprehensive(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -682,6 +921,35 @@ class EnhancedProfessionalTechnicalAnalyzer:
             }
         except:
             return {"error": "风险评估失败"}
+        
+    
+    def call_deepseek_reasoner(self, messages: List[Dict], max_tokens: int = 8000) -> Tuple[str, str]:
+        """调用DeepSeek Reasoner"""
+        try:
+            import openai
+            
+            client = openai.OpenAI(
+                api_key=self.deepseek_key,
+                base_url=DEEPSEEK_API_URL
+            )
+            
+            response = client.chat.completions.create(
+                model="deepseek-reasoner",
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.1,
+                stream=False
+            )
+            
+            message = response.choices[0].message
+            reasoning_content = message.reasoning_content if hasattr(message, 'reasoning_content') else ""
+            final_answer = message.content
+            
+            return reasoning_content, final_answer
+            
+        except Exception as e:
+            print(f"❌ DeepSeek调用失败: {e}")
+            return "", ""
     
     def analyze_symbol_enhanced(self, symbol: str, include_market_info: bool = True, display_result: bool = True) -> Optional[Dict[str, Any]]:
         """增强版品种分析"""
@@ -739,7 +1007,8 @@ class EnhancedProfessionalTechnicalAnalyzer:
                 "market_info": market_info,
                 "reasoning_process": reasoning_content,
                 "professional_analysis": final_analysis,
-                "professional_charts": charts,
+                "professional_charts": charts,  # 原始图表对象
+                "html_charts": self.html_charts,  # HTML格式图表
                 "external_citations": self.external_citations,
                 "data_date": comprehensive_data['latest_date'],
                 "analysis_version": "Enhanced Professional v4.0",
@@ -809,8 +1078,9 @@ class EnhancedProfessionalTechnicalAnalyzer:
             return
         
         # 显示基本信息
+        gradient_style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
         info_html = f"""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+        <div style="{gradient_style} 
                     color: white; padding: 20px; border-radius: 10px; margin: 20px 0;">
             <h2>📊 {result['symbol_name']}({result['symbol']}) 增强版专业技术分析报告</h2>
             <p><strong>📅 分析时间:</strong> {result['analysis_time']}</p>
@@ -845,14 +1115,14 @@ class EnhancedProfessionalTechnicalAnalyzer:
         <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
             <h3>📝 专业技术分析报告</h3>
             <div style="line-height: 1.6; margin-top: 15px;">
-                {result['professional_analysis'].replace('\n', '<br>')}
+                {result['professional_analysis'].replace(chr(10), '<br>').replace(chr(13), '')}
             </div>
         </div>
         """
         display(HTML(analysis_html))
         
         # 显示专业图表
-        if result['professional_charts']:
+        if result.get('html_charts'):
             charts_html = """
             <div style="margin: 20px 0;">
                 <h3>📈 专业技术图表</h3>
@@ -860,8 +1130,22 @@ class EnhancedProfessionalTechnicalAnalyzer:
             """
             display(HTML(charts_html))
             
-            for chart_name, chart_html in result['professional_charts'].items():
-                display(HTML(chart_html))
+            chart_titles = {
+                'technical_overview': '技术分析综合图表',
+                'support_resistance': '支撑阻力分析',
+                'oi_price_analysis': '持仓量与价格关系分析'
+            }
+            
+            for chart_name, chart_html in result['html_charts'].items():
+                title = chart_titles.get(chart_name, chart_name.replace('_', ' ').title())
+                # 为每个图表添加标题和容器
+                chart_container = f"""
+                <div style="margin: 20px 0; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                    <h4 style="margin-bottom: 15px;">{title}</h4>
+                    {chart_html}
+                </div>
+                """
+                display(HTML(chart_container))
         
         # 显示外部引用
         if result['external_citations']:
@@ -899,14 +1183,16 @@ def analyze_enhanced_technical_jupyter(symbol: str, include_market_info: bool = 
     return result
 
 if __name__ == "__main__":
-    print("🚀 增强版专业技术分析系统")
-    print("=" * 50)
-    print("💡 使用方法:")
-    print("1. 标准分析: analyze_enhanced_technical('RB')")
-    print("2. Jupyter分析: analyze_enhanced_technical_jupyter('RB')")
-    print("3. 支持品种: RB, CU, AU, M, RM, JD 等")
-    print("\n✨ 新增特性:")
-    print("- 专业研究报告行文风格")
-    print("- 集成专业图表到报告中")
-    print("- 数据来源标注")
-    print("- Jupyter环境优化显示")
+    analyzer = EnhancedProfessionalTechnicalAnalyzer()
+    df = analyze_enhanced_technical_jupyter('CF')
+    # print("🚀 增强版专业技术分析系统")
+    # print("=" * 50)
+    # print("💡 使用方法:")
+    # print("1. 标准分析: analyze_enhanced_technical('RB')")
+    # print("2. Jupyter分析: analyze_enhanced_technical_jupyter('RB')")
+    # print("3. 支持品种: RB, CU, AU, M, RM, JD 等")
+    # print("\n✨ 新增特性:")
+    # print("- 专业研究报告行文风格")
+    # print("- 集成专业图表到报告中")
+    # print("- 数据来源标注")
+    # print("- Jupyter环境优化显示")

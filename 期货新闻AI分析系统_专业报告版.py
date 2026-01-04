@@ -58,7 +58,6 @@ class ProfessionalFuturesNewsAnalyzer:
     def __init__(self, deepseek_api_key, serper_key="04555ec0f2ce150d1cb628c7a80e2e433e193535"):
         self.deepseek_api_key = deepseek_api_key
         self.deepseek_url = "https://api.deepseek.com/v1/chat/completions"
-        
         # Serper搜索API密钥（已内置）
         self.serper_key = serper_key
         
@@ -571,7 +570,7 @@ class ProfessionalFuturesNewsAnalyzer:
         
         # 更新的有效RSS源
         rss_feeds = {
-            '新华网财经': 'http://rss.news.cn/finance/news.xml',
+            '新华网财经': 'http://rss.xinhuanet.com/rss/fortune.xml',
             '人民网财经': 'http://finance.people.com.cn/rss/finance.xml',
             '央视网财经': 'http://rss.cctv.com/finance',
             '网易财经': 'http://rss.163.com/rss/finance.xml',
@@ -984,7 +983,7 @@ akshare数据：来自官方财经接口的权威数据
                 "max_tokens": 6000
             }
             
-            print(f"===========deepseek_url: {deepseek_url}")
+            # print(f"===========deepseek_url: {self.deepseek_url}, api_key={self.deepseek_api_key}")
             response = self.requests.post(self.deepseek_url, headers=headers, json=data, timeout=120)
             
             if response.status_code == 200:
