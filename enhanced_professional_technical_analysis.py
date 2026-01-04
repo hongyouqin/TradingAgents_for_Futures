@@ -7,6 +7,7 @@
 - 确保数据真实性和来源标注
 """
 
+from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
 import json
@@ -33,11 +34,12 @@ TECHNICAL_ROOT = BASE_DIR / "qihuo" / "database" / "technical_analysis"
 OUTPUT_DIR = BASE_DIR / "qihuo" / "output" / "enhanced_technical_analysis"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# API配置
-DEEPSEEK_API_KEY = "sk-7f7d2bc0785c470dbe86de779699c19f"
-DEEPSEEK_API_URL = "https://api.deepseek.com"
-SERPER_API_KEY = "8f83617621a0d3775cfe8d74a7323c637d105803"
-SERPER_API_URL = "https://google.serper.dev/search"
+# 从环境里面读取API配置
+load_dotenv()
+DEEPSEEK_API_KEY=os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_API_URL=os.getenv("DEEPSEEK_API_URL")
+SERPER_API_KEY=os.getenv("SERPER_API_KEY")
+SERPER_API_URL = os.getenv("SERPER_API_URL")
 
 # 期货品种配置
 SYMBOL_NAMES = {
@@ -1183,16 +1185,14 @@ def analyze_enhanced_technical_jupyter(symbol: str, include_market_info: bool = 
     return result
 
 if __name__ == "__main__":
-    analyzer = EnhancedProfessionalTechnicalAnalyzer()
-    df = analyze_enhanced_technical_jupyter('CF')
-    # print("🚀 增强版专业技术分析系统")
-    # print("=" * 50)
-    # print("💡 使用方法:")
-    # print("1. 标准分析: analyze_enhanced_technical('RB')")
-    # print("2. Jupyter分析: analyze_enhanced_technical_jupyter('RB')")
-    # print("3. 支持品种: RB, CU, AU, M, RM, JD 等")
-    # print("\n✨ 新增特性:")
-    # print("- 专业研究报告行文风格")
-    # print("- 集成专业图表到报告中")
-    # print("- 数据来源标注")
-    # print("- Jupyter环境优化显示")
+    print("🚀 增强版专业技术分析系统")
+    print("=" * 50)
+    print("💡 使用方法:")
+    print("1. 标准分析: analyze_enhanced_technical('RB')")
+    print("2. Jupyter分析: analyze_enhanced_technical_jupyter('RB')")
+    print("3. 支持品种: RB, CU, AU, M, RM, JD 等")
+    print("\n✨ 新增特性:")
+    print("- 专业研究报告行文风格")
+    print("- 集成专业图表到报告中")
+    print("- 数据来源标注")
+    print("- Jupyter环境优化显示")
